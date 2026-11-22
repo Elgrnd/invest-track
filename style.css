@@ -40,6 +40,19 @@ input {
   background: var(--bg); color: var(--text);
   border: 1px solid var(--line); border-radius: 10px;
 }
+/* Safari iOS : le champ "mois" a une largeur et un centrage natifs qui débordent */
+input[type="month"] {
+  -webkit-appearance: none;
+  appearance: none;
+  display: block;
+  min-width: 0;
+  max-width: 100%;
+  min-height: 48px;
+  text-align: left;
+}
+input[type="month"]::-webkit-date-and-time-value { text-align: left; margin: 0; }
+input[type="month"]::-webkit-datetime-edit { padding: 0; }
+label { min-width: 0; }
 input:focus { outline: 2px solid var(--accent); border-color: transparent; }
 
 button, .button {

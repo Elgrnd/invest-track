@@ -5,7 +5,16 @@ Une petite application web progressive (PWA) pour suivre l'argent investi chaque
 - **Crypto** : par exemple, en novembre, 50 € de BTC et 20 € de SOL
 - **Bourse** : ETF, actions, etc.
 
-Pour chaque onglet, l'application affiche le total investi, la répartition par actif et l'historique mois par mois.
+- **Total** : crypto + bourse réunies
+
+Pour chaque onglet, l'application affiche :
+
+- le total investi, le total de l'année en cours et la moyenne mensuelle ;
+- un camembert de la répartition (par actif, ou crypto / bourse dans l'onglet Total) ;
+- un graphique de l'évolution du total investi cumulé ;
+- l'historique mois par mois. Chaque ligne peut être modifiée (✎) ou supprimée (×).
+
+Le bouton **↻ Répéter** recopie en un geste les investissements du mois précédent dans le mois sélectionné.
 
 ## Fonctionnement
 

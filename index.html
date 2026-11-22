@@ -18,14 +18,18 @@
   <header class="top">
     <h1 id="title">Crypto</h1>
     <p class="total-label">Total investi</p>
-    <p class="total" id="total">0,00 €</p>
+    <p class="total-amount" id="total">0,00 €</p>
+    <div class="stats">
+      <div><span id="yearLabel">En 2026</span><b id="yearTotal">0 €</b></div>
+      <div><span>Moyenne / mois</span><b id="avg">0 €</b></div>
+    </div>
   </header>
 
   <main>
-    <section class="card">
-      <h2>Nouvel investissement</h2>
+    <section class="card" id="formCard">
+      <h2 id="formTitle">Nouvel investissement</h2>
       <form id="form" autocomplete="off">
-        <label>
+        <label class="full">
           <span>Mois</span>
           <input type="month" id="month" required>
         </label>
@@ -38,20 +42,30 @@
           <span>Montant (€)</span>
           <input type="number" id="amount" inputmode="decimal" step="0.01" min="0.01" placeholder="50" required>
         </label>
-        <button type="submit" class="primary">Ajouter</button>
+        <button type="submit" class="primary" id="submitBtn">Ajouter</button>
+        <button type="button" class="full" id="cancelBtn" hidden>Annuler la modification</button>
       </form>
+      <button type="button" class="repeat" id="repeatBtn" hidden></button>
     </section>
 
-    <section class="card">
-      <h2>Par actif</h2>
-      <ul id="byAsset" class="bars"></ul>
-      <p class="empty" id="emptyAsset">Aucun investissement pour l'instant.</p>
+    <section class="card" id="splitCard">
+      <h2 id="splitTitle">Répartition</h2>
+      <div class="donut-wrap">
+        <svg id="donut" viewBox="0 0 160 160" role="img" aria-label="Répartition"></svg>
+        <div class="donut-center" id="donutCenter"></div>
+      </div>
+      <ul id="legend" class="legend"></ul>
+    </section>
+
+    <section class="card" id="chartCard">
+      <h2>Évolution du total investi</h2>
+      <div class="chart" id="chart"></div>
     </section>
 
     <section class="card">
       <h2>Historique</h2>
       <div id="history"></div>
-      <p class="empty" id="emptyHistory">Rien à afficher.</p>
+      <p class="empty" id="emptyHistory">Aucun investissement pour l'instant.</p>
     </section>
 
     <section class="card backup">
@@ -70,6 +84,9 @@
     </button>
     <button role="tab" data-tab="bourse" aria-selected="false">
       <span class="ico">📈</span><span>Bourse</span>
+    </button>
+    <button role="tab" data-tab="total" aria-selected="false">
+      <span class="ico">Σ</span><span>Total</span>
     </button>
   </nav>
 

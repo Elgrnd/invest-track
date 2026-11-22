@@ -1,0 +1,78 @@
+<!DOCTYPE html>
+<html lang="fr">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+  <title>Invest Track</title>
+  <meta name="description" content="Suivi de l'argent investi en crypto et en bourse">
+  <meta name="theme-color" content="#0f172a">
+  <link rel="manifest" href="manifest.webmanifest">
+  <link rel="icon" href="icons/icon-192.png" type="image/png">
+  <link rel="apple-touch-icon" href="icons/apple-touch-icon.png">
+  <meta name="apple-mobile-web-app-capable" content="yes">
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent">
+  <meta name="apple-mobile-web-app-title" content="Invest Track">
+  <link rel="stylesheet" href="style.css">
+</head>
+<body>
+  <header class="top">
+    <h1 id="title">Crypto</h1>
+    <p class="total-label">Total investi</p>
+    <p class="total" id="total">0,00 €</p>
+  </header>
+
+  <main>
+    <section class="card">
+      <h2>Nouvel investissement</h2>
+      <form id="form" autocomplete="off">
+        <label>
+          <span>Mois</span>
+          <input type="month" id="month" required>
+        </label>
+        <label>
+          <span>Actif</span>
+          <input type="text" id="asset" list="assets" placeholder="BTC, SOL…" required maxlength="40">
+          <datalist id="assets"></datalist>
+        </label>
+        <label>
+          <span>Montant (€)</span>
+          <input type="number" id="amount" inputmode="decimal" step="0.01" min="0.01" placeholder="50" required>
+        </label>
+        <button type="submit" class="primary">Ajouter</button>
+      </form>
+    </section>
+
+    <section class="card">
+      <h2>Par actif</h2>
+      <ul id="byAsset" class="bars"></ul>
+      <p class="empty" id="emptyAsset">Aucun investissement pour l'instant.</p>
+    </section>
+
+    <section class="card">
+      <h2>Historique</h2>
+      <div id="history"></div>
+      <p class="empty" id="emptyHistory">Rien à afficher.</p>
+    </section>
+
+    <section class="card backup">
+      <h2>Sauvegarde</h2>
+      <p class="hint">Les données sont enregistrées uniquement sur cet appareil. Exportez-les de temps en temps.</p>
+      <div class="row">
+        <button type="button" id="exportBtn">Exporter</button>
+        <label class="button">Importer<input type="file" id="importInput" accept="application/json" hidden></label>
+      </div>
+    </section>
+  </main>
+
+  <nav class="tabs" role="tablist">
+    <button role="tab" data-tab="crypto" aria-selected="true">
+      <span class="ico">₿</span><span>Crypto</span>
+    </button>
+    <button role="tab" data-tab="bourse" aria-selected="false">
+      <span class="ico">📈</span><span>Bourse</span>
+    </button>
+  </nav>
+
+  <script src="app.js"></script>
+</body>
+</html>

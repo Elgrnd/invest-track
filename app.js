@@ -1,7 +1,10 @@
 (() => {
   const STORAGE_KEY = 'invest-track:v1';
   const TABS = { crypto: 'Crypto', bourse: 'Bourse', total: 'Total' };
-  const PLACEHOLDERS = { crypto: 'BTC, SOL…', bourse: 'CAC40, S&P500…' };
+  const LIVE_KEY = STORAGE_KEY + ':live';
+  const LIVE_MAX_AGE = 5 * 60 * 1000; // cours en direct rafraîchis au plus toutes les 5 minutes
+  const OTHER = '__other__';
+  const CATALOG = window.CATALOG || { crypto: [], bourse: [] };
   // Couleurs des graphiques : palette catégorielle validée (daltonisme) sur fond sombre.
   const PALETTE = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#0ca30c', '#9085e9', '#e66767'];
   const OTHER_COLOR = '#64748b';
@@ -14,14 +17,27 @@
   const monthFmt = new Intl.DateTimeFormat('fr-FR', { month: 'long', year: 'numeric' });
   const monthShortFmt = new Intl.DateTimeFormat('fr-FR', { month: 'short', year: '2-digit' });
   const pctFmt = new Intl.NumberFormat('fr-FR', { style: 'percent', maximumFractionDigits: 0 });
+  const pnlPctFmt = new Intl.NumberFormat('fr-FR', { style: 'percent', maximumFractionDigits: 1, signDisplay: 'exceptZero' });
+  const qtyFmt = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 8 });
+  const timeFmt = new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  const dateTimeFmt = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
+  const priceFmt = (v) => new Intl.NumberFormat('fr-FR', {
+    style: 'currency', currency: 'EUR',
+    maximumSignificantDigits: v >= 1000 ? undefined : 6,
+    maximumFractionDigits: v >= 1000 ? 2 : undefined,
+  }).format(v);
+  const signedEuro = (v) => (v > 0 ? '+' : v < 0 ? '−' : '') + euro.format(Math.abs(v));
 
   // ---------- Données ----------
   function load() {
     try {
       const data = JSON.parse(localStorage.getItem(STORAGE_KEY));
-      if (data && Array.isArray(data.crypto) && Array.isArray(data.bourse)) return data;
+      if (data && Array.isArray(data.crypto) && Array.isArray(data.bourse)) {
+        data.prices = { crypto: {}, bourse: {}, ...(data.prices || {}) };
+        return data;
+      }
     } catch (e) { /* données absentes ou illisibles */ }
-    return { crypto: [], bourse: [] };
+    return { crypto: [], bourse: [], prices: { crypto: {}, bourse: {} } };
   }
   function save() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
@@ -111,9 +127,7 @@
     // Formulaire (pas de saisie dans l'onglet Total)
     $('formCard').hidden = tab === 'total';
     if (tab !== 'total') {
-      $('asset').placeholder = PLACEHOLDERS[tab];
-      $('assets').innerHTML = [...new Set(entries.map((e) => e.asset))].sort()
-        .map((a) => `<option value="${escapeHtml(a)}">`).join('');
+      renderAssetSelect();
       renderFormMode();
       renderRepeat();
     }
@@ -121,6 +135,7 @@
     $('splitTitle').textContent = tab === 'total' ? 'Crypto / Bourse' : 'Répartition par actif';
     renderDonut(slicesFor(entries), total);
     renderChart(entries);
+    renderValue();
     renderHistory(entries);
   }
 
@@ -330,6 +345,7 @@
           <div class="entry${e.id === editingId ? ' editing' : ''}">
             <span class="sw" style="background:${colors[e.asset].color}"></span>
             <span class="name">${escapeHtml(e.asset)}</span>
+            ${e.qty ? `<span class="qty">${qtyFmt.format(e.qty)}</span>` : ''}
             <span class="amt">${euro.format(e.amount)}</span>
             <button class="icon-btn edit" data-id="${e.id}" aria-label="Modifier">✎</button>
             <button class="icon-btn del" data-id="${e.id}" aria-label="Supprimer">×</button>
@@ -342,11 +358,210 @@
     $('emptyHistory').hidden = months.length > 0;
   }
 
+  // ---------- Liste d'actifs ----------
+  const lastAsset = {};
+  const catalogItem = (t, sym) => (CATALOG[t] || []).find((c) => c.sym === sym);
+
+  function renderAssetSelect() {
+    const sel = $('assetSelect');
+    const catalog = CATALOG[tab] || [];
+    const own = [...new Set(state[tab].map((e) => e.asset))]
+      .filter((a) => !catalogItem(tab, a)).sort();
+    const opt = (v, label) => `<option value="${escapeHtml(v)}">${escapeHtml(label)}</option>`;
+    sel.innerHTML =
+      (own.length ? `<optgroup label="Mes autres actifs">${own.map((a) => opt(a, a)).join('')}</optgroup>` : '') +
+      `<optgroup label="${tab === 'crypto' ? 'Cryptos' : 'ETF et indices'}">` +
+      catalog.map((c) => opt(c.sym, `${c.sym} — ${c.name}`)).join('') + '</optgroup>' +
+      opt(OTHER, 'Autre… (saisir le nom)');
+    const wanted = lastAsset[tab];
+    sel.value = wanted && [...sel.options].some((o) => o.value === wanted) ? wanted : (catalog[0] ? catalog[0].sym : OTHER);
+    onAssetChange();
+  }
+
+  function selectedAsset() {
+    const v = $('assetSelect').value;
+    if (v !== OTHER) return v;
+    return $('assetCustom').value.trim().toUpperCase();
+  }
+
+  function onAssetChange() {
+    const other = $('assetSelect').value === OTHER;
+    $('customWrap').hidden = !other;
+    $('assetCustom').required = other;
+    lastAsset[tab] = $('assetSelect').value;
+    renderQtyHint();
+  }
+
+  /** Propose la quantité calculée au cours actuel (utile pour un achat du jour). */
+  function renderQtyHint() {
+    const hint = $('qtyHint');
+    const asset = selectedAsset();
+    const amount = parseFloat(String($('amount').value).replace(',', '.'));
+    const p = asset && priceOf(tab, asset);
+    if (!p || !(amount > 0) || $('qty').value) { hint.hidden = true; return; }
+    const q = amount / p.price;
+    hint.innerHTML = `Au cours actuel (${priceFmt(p.price)}), ${euro.format(amount)} ≈ ${qtyFmt.format(q)} ${escapeHtml(asset)}` +
+      `<button type="button" id="useQty">Utiliser</button>`;
+    hint.dataset.q = String(+q.toPrecision(8));
+    hint.hidden = false;
+  }
+
+  $('assetSelect').addEventListener('change', onAssetChange);
+  $('amount').addEventListener('input', renderQtyHint);
+  $('qty').addEventListener('input', renderQtyHint);
+  $('qtyHint').addEventListener('click', (ev) => {
+    if (ev.target.id !== 'useQty') return;
+    $('qty').value = $('qtyHint').dataset.q;
+    renderQtyHint();
+  });
+
+  // ---------- Cours ----------
+  let live = (() => { try { return JSON.parse(localStorage.getItem(LIVE_KEY)) || {}; } catch (e) { return {}; } })();
+  let liveError = false;
+  let liveLoading = false;
+
+  /** Cours d'un actif : en direct (cryptos de la liste) sinon saisi à la main. */
+  function priceOf(t, asset) {
+    const c = catalogItem(t, asset);
+    if (c && c.cg && live.prices && live.prices[c.cg] != null) {
+      return { price: live.prices[c.cg], at: live.at, auto: true };
+    }
+    const m = state.prices[t] && state.prices[t][asset];
+    return m ? { price: m.price, at: m.at, auto: false } : null;
+  }
+
+  async function refreshLivePrices(force = false) {
+    const ids = [...new Set(state.crypto.map((e) => catalogItem('crypto', e.asset)).filter(Boolean).map((c) => c.cg))];
+    if (!ids.length || liveLoading) return;
+    const fresh = live.at && Date.now() - live.at < LIVE_MAX_AGE && ids.every((id) => live.prices && id in live.prices);
+    if (fresh && !force) return;
+    liveLoading = true;
+    renderValue();
+    try {
+      const url = `https://api.coingecko.com/api/v3/simple/price?ids=${ids.join(',')}&vs_currencies=eur`;
+      const res = await fetch(url, { cache: 'no-store' });
+      if (!res.ok) throw new Error(res.status);
+      const data = await res.json();
+      const prices = { ...(live.prices || {}) };
+      Object.entries(data).forEach(([id, v]) => { if (v && typeof v.eur === 'number') prices[id] = v.eur; });
+      live = { at: Date.now(), prices };
+      localStorage.setItem(LIVE_KEY, JSON.stringify(live));
+      liveError = false;
+    } catch (e) {
+      liveError = true;
+    } finally {
+      liveLoading = false;
+      render();
+    }
+  }
+
+  /** Positions (quantité détenue, valeur, plus-value) par actif pour un onglet. */
+  function positionsFor(t) {
+    const byAsset = {};
+    state[t].forEach((e) => {
+      const p = (byAsset[e.asset] ||= { asset: e.asset, kind: t, qty: 0, cost: 0, invested: 0 });
+      p.invested += e.amount;
+      if (e.qty > 0) { p.qty += e.qty; p.cost += e.amount; }
+    });
+    return Object.values(byAsset).filter((p) => p.qty > 0).map((p) => {
+      const pr = priceOf(t, p.asset);
+      const value = pr ? p.qty * pr.price : null;
+      return { ...p, price: pr, value, pnl: value === null ? null : value - p.cost };
+    });
+  }
+
+  /** Synthèse : valeur des positions avec cours connu, et ce qu'elles ont coûté. */
+  function summary(kinds) {
+    const pos = kinds.flatMap(positionsFor);
+    const priced = pos.filter((p) => p.value !== null);
+    const value = priced.reduce((s, p) => s + p.value, 0);
+    const cost = priced.reduce((s, p) => s + p.cost, 0);
+    const noQty = kinds.reduce((s, k) => s + sum(state[k].filter((e) => !(e.qty > 0))), 0);
+    return { pos, priced, value, cost, pnl: value - cost, missing: pos.filter((p) => p.value === null), noQty };
+  }
+
+  function pnlHtml(pnl, cost) {
+    if (!cost) return '';
+    const cls = pnl > 0 ? 'up' : pnl < 0 ? 'down' : '';
+    const arrow = pnl > 0 ? '▲' : pnl < 0 ? '▼' : '';
+    return `<em class="${cls}">${arrow} ${signedEuro(pnl)} (${pnlPctFmt.format(pnl / cost)})</em>`;
+  }
+
+  function renderValue() {
+    const kinds = tab === 'total' ? ['crypto', 'bourse'] : [tab];
+    const s = summary(kinds);
+
+    // Tuile d'en-tête
+    $('valueTile').hidden = s.priced.length === 0;
+    $('valueNow').textContent = euroRound.format(s.value);
+    $('pnl').textContent = s.cost
+      ? `${s.pnl > 0 ? '▲' : s.pnl < 0 ? '▼' : ''} ${signedEuro(s.pnl)} (${pnlPctFmt.format(s.pnl / s.cost)})`
+      : '';
+    $('pnl').className = s.pnl > 0 ? 'up' : s.pnl < 0 ? 'down' : '';
+
+    // Carte détaillée
+    $('valueCard').hidden = s.pos.length === 0 && s.noQty === 0;
+    $('refreshBtn').hidden = !kinds.includes('crypto') || !state.crypto.some((e) => catalogItem('crypto', e.asset));
+    $('refreshBtn').disabled = liveLoading;
+    $('refreshBtn').textContent = liveLoading ? 'Mise à jour…' : '↻ Actualiser';
+
+    const info = [];
+    if (kinds.includes('crypto') && live.at) info.push(`Cours crypto : CoinGecko, ${timeFmt.format(new Date(live.at))}.`);
+    if (liveError) info.push('Cours en direct indisponibles (hors ligne ?) : derniers cours connus affichés.');
+    if (kinds.includes('bourse') && state.bourse.some((e) => e.qty > 0)) info.push('Cours bourse : saisis à la main, touchez un cours pour le mettre à jour.');
+    $('priceInfo').textContent = info.join(' ');
+    $('priceInfo').hidden = info.length === 0;
+
+    const colors = tab === 'total' ? null : assetColors(entriesFor(tab));
+    const rows = s.pos.sort((a, b) => (b.value ?? -1) - (a.value ?? -1)).map((p) => {
+      const color = colors ? (colors[p.asset] || {}).color : KIND_COLORS[p.kind];
+      const priceLabel = p.price ? priceFmt(p.price.price) : 'Saisir le cours';
+      const priceTitle = p.price && !p.price.auto ? ` (saisi le ${dateTimeFmt.format(new Date(p.price.at))})` : '';
+      const priceEl = p.price && p.price.auto
+        ? `<span>${priceLabel}</span>`
+        : `<button type="button" class="price-btn${p.price ? '' : ' missing'}" data-kind="${p.kind}" data-asset="${escapeHtml(p.asset)}" title="Modifier le cours${priceTitle}">${priceLabel}</button>`;
+      const partial = p.cost < p.invested ? ` · ${euro.format(p.invested - p.cost)} sans quantité` : '';
+      return `<div class="pos">
+        <div class="pos-top">
+          <span class="sw" style="background:${color || OTHER_COLOR}"></span>
+          <span class="name">${escapeHtml(p.asset)}</span>
+          <b>${p.value === null ? '—' : euro.format(p.value)}</b>
+        </div>
+        <div class="pos-bot">
+          <span class="grow">${qtyFmt.format(p.qty)} × ${priceEl}</span>
+          ${p.value === null ? '' : pnlHtml(p.pnl, p.cost)}
+        </div>
+        <div class="pos-bot"><span>Payé ${euro.format(p.cost)}${partial}</span></div>
+      </div>`;
+    }).join('');
+    $('positions').innerHTML = rows || '<p class="empty">Ajoutez la quantité achetée à vos investissements pour suivre leur valeur.</p>';
+
+    $('noQtyInfo').hidden = !(s.noQty > 0 && s.pos.length > 0);
+    $('noQtyInfo').textContent = `${euro.format(s.noQty)} investis sans quantité ne sont pas pris en compte. Touchez ✎ dans l'historique pour l'ajouter.`;
+  }
+
+  $('refreshBtn').addEventListener('click', () => refreshLivePrices(true));
+  $('positions').addEventListener('click', (ev) => {
+    const btn = ev.target.closest('.price-btn');
+    if (!btn) return;
+    const { kind, asset } = btn.dataset;
+    const cur = state.prices[kind][asset];
+    const v = prompt(`Cours actuel de ${asset} (en €) :`, cur ? String(cur.price).replace('.', ',') : '');
+    if (v === null) return;
+    const price = parseFloat(v.replace(/\s/g, '').replace(',', '.'));
+    if (!(price > 0)) { alert('Cours invalide.'); return; }
+    state.prices[kind][asset] = { price, at: Date.now() };
+    save();
+    render();
+  });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshLivePrices(); });
+
   // ---------- Actions ----------
   function resetForm() {
     editingId = null;
-    $('asset').value = '';
     $('amount').value = '';
+    $('qty').value = '';
+    $('assetCustom').value = '';
   }
 
   $('month').value = currentMonth();
@@ -355,19 +570,24 @@
   $('form').addEventListener('submit', (ev) => {
     ev.preventDefault();
     const amount = Math.round(parseFloat(String($('amount').value).replace(',', '.')) * 100) / 100;
-    const asset = $('asset').value.trim().toUpperCase();
+    const asset = selectedAsset();
     const month = $('month').value;
-    if (!asset || !month || !(amount > 0)) return;
+    const qty = parseFloat(String($('qty').value).replace(',', '.'));
+    if (!asset) { $('assetCustom').focus(); return; }
+    if (!month || !(amount > 0)) return;
+    const data = { month, asset, amount };
+    if (qty > 0) data.qty = qty;
     if (editingId) {
       const e = state[tab].find((x) => x.id === editingId);
-      if (e) Object.assign(e, { month, asset, amount });
+      if (e) { delete e.qty; Object.assign(e, data); }
     } else {
-      state[tab].push({ id: uid(), month, asset, amount });
+      state[tab].push({ id: uid(), ...data });
     }
+    lastAsset[tab] = asset;
     save();
     resetForm();
     render();
-    $('asset').focus();
+    refreshLivePrices();
   });
 
   $('cancelBtn').addEventListener('click', () => { resetForm(); $('month').value = currentMonth(); render(); });
@@ -388,8 +608,9 @@
     if (btn.classList.contains('edit')) {
       editingId = entry.id;
       $('month').value = entry.month;
-      $('asset').value = entry.asset;
       $('amount').value = entry.amount;
+      $('qty').value = entry.qty || '';
+      lastAsset[tab] = entry.asset;
       render();
       $('formCard').scrollIntoView({ behavior: 'smooth', block: 'center' });
       return;
@@ -435,11 +656,12 @@
     try {
       const data = JSON.parse(await file.text());
       const valid = (list) => Array.isArray(list) && list.every((e) =>
-        e && typeof e.asset === 'string' && typeof e.amount === 'number' && /^\d{4}-\d{2}$/.test(e.month));
+        e && typeof e.asset === 'string' && typeof e.amount === 'number' && /^\d{4}-\d{2}$/.test(e.month)
+        && (e.qty === undefined || typeof e.qty === 'number'));
       if (!valid(data.crypto) || !valid(data.bourse)) throw new Error('format');
       if (!confirm('Remplacer les données actuelles par celles du fichier ?')) return;
       ['crypto', 'bourse'].forEach((k) => data[k].forEach((e) => { e.id ||= uid(); }));
-      state = { crypto: data.crypto, bourse: data.bourse };
+      state = { crypto: data.crypto, bourse: data.bourse, prices: { crypto: {}, bourse: {}, ...(data.prices || {}) } };
       resetForm();
       save();
       render();
@@ -449,6 +671,7 @@
   });
 
   render();
+  refreshLivePrices();
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => navigator.serviceWorker.register('sw.js'));

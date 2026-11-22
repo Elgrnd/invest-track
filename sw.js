@@ -1,9 +1,10 @@
-const CACHE = 'invest-track-v4';
+const CACHE = 'invest-track-v5';
 const ASSETS = [
   './',
   'index.html',
   'style.css',
   'app.js',
+  'catalog.js',
   'manifest.webmanifest',
   'icons/icon-192.png',
   'icons/icon-512.png',
@@ -26,6 +27,8 @@ self.addEventListener('activate', (event) => {
 // Réseau d'abord (pour récupérer les mises à jour), cache si hors ligne.
 self.addEventListener('fetch', (event) => {
   if (event.request.method !== 'GET') return;
+  // Les appels aux API de cours ne passent pas par le cache : l'appli garde ses propres derniers cours.
+  if (new URL(event.request.url).origin !== self.location.origin) return;
   event.respondWith(
     fetch(event.request)
       .then((res) => {

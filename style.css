@@ -156,3 +156,43 @@ button, .button {
 }
 .tabs .ico { font-size: 1.3rem; line-height: 1.4rem; }
 .tabs button[aria-selected="true"] { color: var(--accent); }
+
+/* ---- Liste d'actifs, quantité ---- */
+select {
+  width: 100%; padding: 12px; font-size: 1rem; min-height: 48px;
+  background: var(--bg); color: var(--text);
+  border: 1px solid var(--line); border-radius: 10px;
+  -webkit-appearance: none; appearance: none;
+  background-image: linear-gradient(45deg, transparent 50%, var(--muted) 50%), linear-gradient(135deg, var(--muted) 50%, transparent 50%);
+  background-position: calc(100% - 18px) 50%, calc(100% - 13px) 50%;
+  background-size: 5px 5px; background-repeat: no-repeat;
+}
+select:focus { outline: 2px solid var(--accent); border-color: transparent; }
+label small { font-size: .75rem; }
+.qty-hint { margin: -4px 0 0; font-size: .8rem; color: var(--muted); }
+.qty-hint button { padding: 2px 8px; font-size: .8rem; margin-left: 4px; }
+
+/* ---- Tuiles ---- */
+.stats { flex-wrap: wrap; max-width: 420px; margin-left: auto; margin-right: auto; }
+.stats > div { flex: 1; }
+.stats .wide { flex-basis: 100%; flex-direction: row; align-items: baseline; justify-content: center; gap: 10px; }
+.stats em { font-style: normal; font-size: .9rem; font-weight: 600; font-variant-numeric: tabular-nums; }
+.up { color: #4ade80; }
+.down { color: #f87171; }
+
+/* ---- Valeur actuelle ---- */
+.card-head { display: flex; align-items: center; justify-content: space-between; margin-bottom: 4px; }
+.card-head h2 { margin: 0; }
+button.small { padding: 6px 10px; font-size: .8rem; }
+.pos { padding: 10px 0; border-bottom: 1px solid var(--line); }
+.pos:last-child { border-bottom: 0; }
+.pos-top, .pos-bot { display: flex; align-items: baseline; gap: 8px; }
+.pos-top .name { flex: 1; font-weight: 600; min-width: 0; overflow: hidden; text-overflow: ellipsis; white-space: nowrap; }
+.pos-top b { font-variant-numeric: tabular-nums; }
+.pos-bot { font-size: .8rem; color: var(--muted); margin-top: 2px; }
+.pos-bot .grow { flex: 1; }
+.pos-bot em { font-style: normal; font-weight: 600; font-variant-numeric: tabular-nums; }
+.pos .sw { width: 10px; height: 10px; border-radius: 3px; flex: none; align-self: center; }
+.price-btn { padding: 0 4px; border: 0; color: var(--muted); font-size: .8rem; text-decoration: underline dotted; }
+.price-btn.missing { color: var(--accent); }
+.entry .qty { color: var(--muted); font-size: .8rem; margin-right: 6px; font-variant-numeric: tabular-nums; }

@@ -22,6 +22,9 @@
     <div class="stats">
       <div><span id="yearLabel">En 2026</span><b id="yearTotal">0 €</b></div>
       <div><span>Moyenne / mois</span><b id="avg">0 €</b></div>
+      <div class="wide" id="valueTile" hidden>
+        <span>Valeur actuelle</span><b id="valueNow">0 €</b><em id="pnl"></em>
+      </div>
     </div>
   </header>
 
@@ -33,19 +36,37 @@
           <span>Mois</span>
           <input type="month" id="month" required>
         </label>
-        <label>
+        <label class="full">
           <span>Actif</span>
-          <input type="text" id="asset" list="assets" placeholder="BTC, SOL…" required maxlength="40">
-          <datalist id="assets"></datalist>
+          <select id="assetSelect" required></select>
+        </label>
+        <label class="full" id="customWrap" hidden>
+          <span>Nom de l'actif</span>
+          <input type="text" id="assetCustom" maxlength="40" placeholder="Ex. : AAPL, PAXG…">
         </label>
         <label>
           <span>Montant (€)</span>
           <input type="number" id="amount" inputmode="decimal" step="0.01" min="0.01" placeholder="50" required>
         </label>
+        <label>
+          <span>Quantité <small>(optionnel)</small></span>
+          <input type="number" id="qty" inputmode="decimal" step="any" min="0" placeholder="0,0005">
+        </label>
+        <p class="qty-hint full" id="qtyHint" hidden></p>
         <button type="submit" class="primary" id="submitBtn">Ajouter</button>
         <button type="button" class="full" id="cancelBtn" hidden>Annuler la modification</button>
       </form>
       <button type="button" class="repeat" id="repeatBtn" hidden></button>
+    </section>
+
+    <section class="card" id="valueCard" hidden>
+      <div class="card-head">
+        <h2>Valeur actuelle</h2>
+        <button type="button" class="small" id="refreshBtn">↻ Actualiser</button>
+      </div>
+      <p class="hint" id="priceInfo"></p>
+      <div id="positions"></div>
+      <p class="hint" id="noQtyInfo" hidden></p>
     </section>
 
     <section class="card" id="splitCard">
@@ -90,6 +111,7 @@
     </button>
   </nav>
 
+  <script src="catalog.js"></script>
   <script src="app.js"></script>
 </body>
 </html>

@@ -14,6 +14,15 @@ Pour chaque onglet, l'application affiche :
 - un graphique de l'évolution du total investi cumulé ;
 - l'historique mois par mois. Chaque ligne peut être modifiée (✎) ou supprimée (×).
 
+## Quantité et valeur actuelle
+
+- L'actif se choisit dans une **liste** (principales cryptos, ETF et indices courants). « Autre… » permet d'en saisir un nouveau.
+- Pour chaque investissement, vous pouvez indiquer la **quantité achetée** (optionnel). L'application propose la quantité calculée au cours du jour.
+- La carte **Valeur actuelle** affiche, pour chaque actif, la quantité détenue × le cours, la valeur et la plus- ou moins-value.
+  - **Cryptos de la liste** : cours en direct via l'API gratuite [CoinGecko](https://www.coingecko.com/), rafraîchis à l'ouverture (au plus toutes les 5 min) ou avec « ↻ Actualiser ».
+  - **Bourse et actifs « Autre »** : touchez le cours pour le saisir à la main (il n'existe pas d'API de cours boursiers gratuite utilisable directement depuis le navigateur).
+- Les montants investis sans quantité ne sont pas comptés dans la valeur actuelle.
+
 Le bouton **↻ Répéter** recopie en un geste les investissements du mois précédent dans le mois sélectionné.
 
 ## Fonctionnement

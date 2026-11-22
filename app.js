@@ -1,6 +1,7 @@
 (() => {
   const STORAGE_KEY = 'invest-track:v1';
   const TABS = { crypto: 'Crypto', bourse: 'Bourse' };
+  const PLACEHOLDERS = { crypto: 'BTC, SOL…', bourse: 'CAC40, S&P500…' };
 
   const $ = (id) => document.getElementById(id);
   const euro = new Intl.NumberFormat('fr-FR', { style: 'currency', currency: 'EUR' });
@@ -37,6 +38,7 @@
     const entries = state[tab];
     document.body.className = tab;
     $('title').textContent = TABS[tab];
+    $('asset').placeholder = PLACEHOLDERS[tab];
     document.querySelectorAll('.tabs button').forEach((b) =>
       b.setAttribute('aria-selected', String(b.dataset.tab === tab)));
 

@@ -460,25 +460,25 @@
     if (!due.length) return;
     eodLoading = true;
     renderValue();
-    const from = new Date(Date.now() - 14 * 864e5).toISOString().slice(0, 10);
-    for (const t of due) {
-      try {
-        const url = `https://eodhd.com/api/eod/${encodeURIComponent(t)}?api_token=${encodeURIComponent(eodKey)}&fmt=json&order=d&from=${from}`;
-        const res = await fetch(url, { cache: 'no-store' });
-        if (res.status === 401 || res.status === 403) { eodStatus = 'Clé EODHD refusée : vérifiez-la dans les réglages ci-dessous.'; break; }
-        if (res.status === 402 || res.status === 429) { eodStatus = 'Quota EODHD du jour atteint (20 appels) : derniers cours connus affichés.'; break; }
-        if (res.status === 404) { eod.errors[t] = Date.now(); continue; }
-        if (!res.ok) throw new Error(res.status);
-        const rows = await res.json();
-        const last = Array.isArray(rows) && rows.find((r) => typeof r.close === 'number');
-        if (!last) { eod.errors[t] = Date.now(); continue; }
-        eod.prices[t] = { price: last.close, date: last.date, at: Date.now() };
-        delete eod.errors[t];
-        eodStatus = '';
-      } catch (e) {
-        eodStatus = 'Cours de bourse indisponibles (hors ligne ?) : derniers cours connus affichés.';
-        break;
-      }
+    try {
+      // Passe par la fonction serveur /api/eod (EODHD bloque les appels directs depuis le navigateur).
+      const url = `api/eod?t=${encodeURIComponent(due.join(','))}&key=${encodeURIComponent(eodKey)}`;
+      const res = await fetch(url, { cache: 'no-store' });
+      if (res.status === 401) eodStatus = 'Clé EODHD refusée : vérifiez-la dans les réglages ci-dessous.';
+      else if (res.status === 402) eodStatus = 'Quota EODHD du jour atteint (20 appels) : derniers cours connus affichés.';
+      else if (!res.ok) throw new Error(res.status);
+      else eodStatus = '';
+      const { results = {} } = await res.json().catch(() => ({}));
+      Object.entries(results).forEach(([t, r]) => {
+        if (r && typeof r.price === 'number') {
+          eod.prices[t] = { price: r.price, date: r.date, at: Date.now() };
+          delete eod.errors[t];
+        } else if (r && r.error === 'not_found') {
+          eod.errors[t] = Date.now();
+        }
+      });
+    } catch (e) {
+      eodStatus = 'Cours de bourse indisponibles (hors ligne ?) : derniers cours connus affichés.';
     }
     saveEod();
     eodLoading = false;

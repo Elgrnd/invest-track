@@ -30,6 +30,7 @@ Le bouton **↻ Répéter** recopie en un geste les investissements du mois pré
 ## Fonctionnement
 
 - HTML, CSS et JavaScript simples, sans dépendances ni étape de build.
+- Les cours de bourse passent par une petite fonction serveur Vercel (`api/eod.js`), car EODHD refuse les appels directs depuis le navigateur. La clé peut aussi être définie dans la variable d'environnement Vercel `EODHD_KEY`.
 - Les données sont enregistrées dans le navigateur (`localStorage`), uniquement sur l'appareil. Utilisez **Exporter** / **Importer** pour faire une sauvegarde ou passer d'un appareil à l'autre.
 - L'application fonctionne hors ligne grâce au service worker et peut être installée sur l'écran d'accueil.
 

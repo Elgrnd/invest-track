@@ -20,7 +20,9 @@ Pour chaque onglet, l'application affiche :
 - Pour chaque investissement, vous pouvez indiquer la **quantité achetée** (optionnel). L'application propose la quantité calculée au cours du jour.
 - La carte **Valeur actuelle** affiche, pour chaque actif, la quantité détenue × le cours, la valeur et la plus- ou moins-value.
   - **Cryptos de la liste** : cours en direct via l'API gratuite [CoinGecko](https://www.coingecko.com/), rafraîchis à l'ouverture (au plus toutes les 5 min) ou avec « ↻ Actualiser ».
-  - **Bourse et actifs « Autre »** : touchez le cours pour le saisir à la main (il n'existe pas d'API de cours boursiers gratuite utilisable directement depuis le navigateur).
+  - **Bourse** : cours de clôture automatiques via [EODHD](https://eodhd.com/register). Créez un compte gratuit (20 appels/jour), puis collez votre clé API dans la carte « Cours de bourse automatiques » de l'onglet Bourse. L'appli fait au plus 1 appel par ETF toutes les 6 h. La clé reste sur l'appareil et n'est jamais exportée.
+    - Les ETF de la liste ont déjà leur ticker (ex. `CW8.PA`). Pour un actif « Autre », touchez « Saisir le cours » et entrez son ticker EODHD (ex. `AIR.PA` pour Airbus) ; les cours doivent être en euros.
+    - Sans clé, ou pour les indices, le cours se saisit à la main.
 - Les montants investis sans quantité ne sont pas comptés dans la valeur actuelle.
 
 Le bouton **↻ Répéter** recopie en un geste les investissements du mois précédent dans le mois sélectionné.

@@ -1,4 +1,4 @@
-const CACHE = 'invest-track-v5';
+const CACHE = 'invest-track-v6';
 const ASSETS = [
   './',
   'index.html',

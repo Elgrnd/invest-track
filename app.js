@@ -4,6 +4,10 @@
   const LIVE_KEY = STORAGE_KEY + ':live';
   const LIVE_MAX_AGE = 5 * 60 * 1000; // cours en direct rafraîchis au plus toutes les 5 minutes
   const OTHER = '__other__';
+  const EOD_KEY = STORAGE_KEY + ':eodhd-key';      // clé API, jamais exportée
+  const EOD_LIVE = STORAGE_KEY + ':live-bourse';   // derniers cours de clôture récupérés
+  const EOD_MAX_AGE = 6 * 60 * 60 * 1000;          // 1 appel par ETF toutes les 6 h au plus (offre gratuite : 20/jour)
+  const TICKER_RE = /^[A-Z0-9][A-Z0-9\-_]*\.[A-Z]{1,6}$/;
   const CATALOG = window.CATALOG || { crypto: [], bourse: [] };
   // Couleurs des graphiques : palette catégorielle validée (daltonisme) sur fond sombre.
   const PALETTE = ['#3987e5', '#d95926', '#199e70', '#c98500', '#d55181', '#0ca30c', '#9085e9', '#e66767'];
@@ -20,6 +24,7 @@
   const pnlPctFmt = new Intl.NumberFormat('fr-FR', { style: 'percent', maximumFractionDigits: 1, signDisplay: 'exceptZero' });
   const qtyFmt = new Intl.NumberFormat('fr-FR', { maximumFractionDigits: 8 });
   const timeFmt = new Intl.DateTimeFormat('fr-FR', { hour: '2-digit', minute: '2-digit' });
+  const dayFmt = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short' });
   const dateTimeFmt = new Intl.DateTimeFormat('fr-FR', { day: 'numeric', month: 'short', hour: '2-digit', minute: '2-digit' });
   const priceFmt = (v) => new Intl.NumberFormat('fr-FR', {
     style: 'currency', currency: 'EUR',
@@ -34,10 +39,11 @@
       const data = JSON.parse(localStorage.getItem(STORAGE_KEY));
       if (data && Array.isArray(data.crypto) && Array.isArray(data.bourse)) {
         data.prices = { crypto: {}, bourse: {}, ...(data.prices || {}) };
+        data.tickers = { bourse: {}, ...(data.tickers || {}) };
         return data;
       }
     } catch (e) { /* données absentes ou illisibles */ }
-    return { crypto: [], bourse: [], prices: { crypto: {}, bourse: {} } };
+    return { crypto: [], bourse: [], prices: { crypto: {}, bourse: {} }, tickers: { bourse: {} } };
   }
   function save() {
     try { localStorage.setItem(STORAGE_KEY, JSON.stringify(state)); }
@@ -136,6 +142,7 @@
     renderDonut(slicesFor(entries), total);
     renderChart(entries);
     renderValue();
+    renderEodSettings();
     renderHistory(entries);
   }
 
@@ -426,9 +433,89 @@
     if (c && c.cg && live.prices && live.prices[c.cg] != null) {
       return { price: live.prices[c.cg], at: live.at, auto: true };
     }
+    if (t === 'bourse') {
+      const tk = tickerOf(asset);
+      const q = tk && eod.prices[tk];
+      if (q) return { price: q.price, at: q.at, date: q.date, auto: true, ticker: tk };
+    }
     const m = state.prices[t] && state.prices[t][asset];
     return m ? { price: m.price, at: m.at, auto: false } : null;
   }
+
+  // ---------- Cours de bourse (EODHD) ----------
+  let eodKey = localStorage.getItem(EOD_KEY) || '';
+  let eod = (() => { try { return { prices: {}, errors: {}, ...JSON.parse(localStorage.getItem(EOD_LIVE)) }; } catch (e) { return { prices: {}, errors: {} }; } })();
+  let eodLoading = false;
+  let eodStatus = ''; // message d'erreur global (clé invalide, quota atteint…)
+
+  const tickerOf = (asset) => (catalogItem('bourse', asset) || {}).eod || state.tickers.bourse[asset] || null;
+  const saveEod = () => { try { localStorage.setItem(EOD_LIVE, JSON.stringify(eod)); } catch (e) { /* plein */ } };
+
+  /** Récupère le dernier cours de clôture de chaque ETF détenu (1 appel API par ticker). */
+  async function refreshBoursePrices(force = false) {
+    if (!eodKey || eodLoading) return;
+    const tickers = [...new Set(state.bourse.filter((e) => e.qty > 0).map((e) => tickerOf(e.asset)).filter(Boolean))];
+    const lastTry = (t) => Math.max(eod.prices[t] ? eod.prices[t].at : 0, eod.errors[t] || 0);
+    const due = tickers.filter((t) => force || Date.now() - lastTry(t) > EOD_MAX_AGE);
+    if (!due.length) return;
+    eodLoading = true;
+    renderValue();
+    const from = new Date(Date.now() - 14 * 864e5).toISOString().slice(0, 10);
+    for (const t of due) {
+      try {
+        const url = `https://eodhd.com/api/eod/${encodeURIComponent(t)}?api_token=${encodeURIComponent(eodKey)}&fmt=json&order=d&from=${from}`;
+        const res = await fetch(url, { cache: 'no-store' });
+        if (res.status === 401 || res.status === 403) { eodStatus = 'Clé EODHD refusée : vérifiez-la dans les réglages ci-dessous.'; break; }
+        if (res.status === 402 || res.status === 429) { eodStatus = 'Quota EODHD du jour atteint (20 appels) : derniers cours connus affichés.'; break; }
+        if (res.status === 404) { eod.errors[t] = Date.now(); continue; }
+        if (!res.ok) throw new Error(res.status);
+        const rows = await res.json();
+        const last = Array.isArray(rows) && rows.find((r) => typeof r.close === 'number');
+        if (!last) { eod.errors[t] = Date.now(); continue; }
+        eod.prices[t] = { price: last.close, date: last.date, at: Date.now() };
+        delete eod.errors[t];
+        eodStatus = '';
+      } catch (e) {
+        eodStatus = 'Cours de bourse indisponibles (hors ligne ?) : derniers cours connus affichés.';
+        break;
+      }
+    }
+    saveEod();
+    eodLoading = false;
+    render();
+  }
+
+  function renderEodSettings() {
+    const card = $('eodCard');
+    card.hidden = tab !== 'bourse';
+    if (card.hidden) return;
+    $('eodState').textContent = eodKey ? 'Clé enregistrée ✓' : 'Aucune clé : les cours se saisissent à la main.';
+    $('eodState').className = eodKey ? 'up' : '';
+    $('eodRemove').hidden = !eodKey;
+    $('eodForm').hidden = !!eodKey && !$('eodCard').classList.contains('editing');
+    $('eodEdit').hidden = !eodKey || !$('eodForm').hidden;
+  }
+
+  $('eodForm').addEventListener('submit', async (ev) => {
+    ev.preventDefault();
+    const k = $('eodInput').value.trim();
+    if (!k) return;
+    eodKey = k;
+    localStorage.setItem(EOD_KEY, k);
+    $('eodInput').value = '';
+    $('eodCard').classList.remove('editing');
+    eodStatus = '';
+    renderEodSettings();
+    await refreshBoursePrices(true);
+  });
+  $('eodEdit').addEventListener('click', () => { $('eodCard').classList.add('editing'); renderEodSettings(); $('eodInput').focus(); });
+  $('eodRemove').addEventListener('click', () => {
+    if (!confirm('Supprimer la clé EODHD de cet appareil ?')) return;
+    eodKey = '';
+    localStorage.removeItem(EOD_KEY);
+    eodStatus = '';
+    render();
+  });
 
   async function refreshLivePrices(force = false) {
     const ids = [...new Set(state.crypto.map((e) => catalogItem('crypto', e.asset)).filter(Boolean).map((c) => c.cg))];
@@ -501,14 +588,25 @@
 
     // Carte détaillée
     $('valueCard').hidden = s.pos.length === 0 && s.noQty === 0;
-    $('refreshBtn').hidden = !kinds.includes('crypto') || !state.crypto.some((e) => catalogItem('crypto', e.asset));
-    $('refreshBtn').disabled = liveLoading;
-    $('refreshBtn').textContent = liveLoading ? 'Mise à jour…' : '↻ Actualiser';
+    const canCrypto = kinds.includes('crypto') && state.crypto.some((e) => catalogItem('crypto', e.asset));
+    const canBourse = kinds.includes('bourse') && !!eodKey && state.bourse.some((e) => e.qty > 0 && tickerOf(e.asset));
+    $('refreshBtn').hidden = !canCrypto && !canBourse;
+    $('refreshBtn').disabled = liveLoading || eodLoading;
+    $('refreshBtn').textContent = liveLoading || eodLoading ? 'Mise à jour…' : '↻ Actualiser';
 
     const info = [];
     if (kinds.includes('crypto') && live.at) info.push(`Cours crypto : CoinGecko, ${timeFmt.format(new Date(live.at))}.`);
     if (liveError) info.push('Cours en direct indisponibles (hors ligne ?) : derniers cours connus affichés.');
-    if (kinds.includes('bourse') && state.bourse.some((e) => e.qty > 0)) info.push('Cours bourse : saisis à la main, touchez un cours pour le mettre à jour.');
+    if (kinds.includes('bourse') && state.bourse.some((e) => e.qty > 0)) {
+      const dates = Object.values(eod.prices).map((q) => q.date).filter(Boolean).sort();
+      if (eodKey && dates.length) info.push(`Cours bourse : clôture du ${dayFmt.format(new Date(dates[dates.length - 1]))} (EODHD).`);
+      if (eodStatus) info.push(eodStatus);
+      const bad = [...new Set(state.bourse.map((e) => tickerOf(e.asset)).filter((t) => t && eod.errors[t]))];
+      if (eodKey && bad.length) info.push(`Ticker introuvable : ${bad.join(', ')}.`);
+      if (state.bourse.some((e) => e.qty > 0 && !priceOf('bourse', e.asset)?.auto)) {
+        info.push('Touchez un cours souligné pour le saisir à la main.');
+      }
+    }
     $('priceInfo').textContent = info.join(' ');
     $('priceInfo').hidden = info.length === 0;
 
@@ -518,7 +616,7 @@
       const priceLabel = p.price ? priceFmt(p.price.price) : 'Saisir le cours';
       const priceTitle = p.price && !p.price.auto ? ` (saisi le ${dateTimeFmt.format(new Date(p.price.at))})` : '';
       const priceEl = p.price && p.price.auto
-        ? `<span>${priceLabel}</span>`
+        ? `<span title="${p.price.ticker ? `${escapeHtml(p.price.ticker)}, clôture du ${escapeHtml(p.price.date)}` : 'Cours en direct'}">${priceLabel}</span>`
         : `<button type="button" class="price-btn${p.price ? '' : ' missing'}" data-kind="${p.kind}" data-asset="${escapeHtml(p.asset)}" title="Modifier le cours${priceTitle}">${priceLabel}</button>`;
       const partial = p.cost < p.invested ? ` · ${euro.format(p.invested - p.cost)} sans quantité` : '';
       return `<div class="pos">
@@ -540,21 +638,35 @@
     $('noQtyInfo').textContent = `${euro.format(s.noQty)} investis sans quantité ne sont pas pris en compte. Touchez ✎ dans l'historique pour l'ajouter.`;
   }
 
-  $('refreshBtn').addEventListener('click', () => refreshLivePrices(true));
+  $('refreshBtn').addEventListener('click', () => { refreshLivePrices(true); refreshBoursePrices(true); });
   $('positions').addEventListener('click', (ev) => {
     const btn = ev.target.closest('.price-btn');
     if (!btn) return;
     const { kind, asset } = btn.dataset;
     const cur = state.prices[kind][asset];
-    const v = prompt(`Cours actuel de ${asset} (en €) :`, cur ? String(cur.price).replace('.', ',') : '');
+    const canLink = kind === 'bourse' && !catalogItem('bourse', asset);
+    const question = canLink
+      ? `Cours actuel de ${asset} en € (ex. 95,40)\nou ticker EODHD pour une mise à jour automatique (ex. AIR.PA) :`
+      : `Cours actuel de ${asset} (en €) :`;
+    const v = prompt(question, cur ? String(cur.price).replace('.', ',') : (state.tickers.bourse[asset] || ''));
     if (v === null) return;
-    const price = parseFloat(v.replace(/\s/g, '').replace(',', '.'));
+    const txt = v.trim().toUpperCase();
+    if (canLink && TICKER_RE.test(txt)) { // « 95.40 » n'est pas un ticker : le suffixe doit être en lettres
+      state.tickers.bourse[asset] = txt;
+      delete eod.errors[txt];
+      save();
+      render();
+      if (eodKey) refreshBoursePrices(true);
+      else alert('Ticker enregistré. Ajoutez une clé EODHD (carte « Cours de bourse automatiques ») pour récupérer le cours.');
+      return;
+    }
+    const price = parseFloat(txt.replace(/\s/g, '').replace(',', '.'));
     if (!(price > 0)) { alert('Cours invalide.'); return; }
     state.prices[kind][asset] = { price, at: Date.now() };
     save();
     render();
   });
-  document.addEventListener('visibilitychange', () => { if (!document.hidden) refreshLivePrices(); });
+  document.addEventListener('visibilitychange', () => { if (!document.hidden) { refreshLivePrices(); refreshBoursePrices(); } });
 
   // ---------- Actions ----------
   function resetForm() {
@@ -588,6 +700,7 @@
     resetForm();
     render();
     refreshLivePrices();
+    refreshBoursePrices();
   });
 
   $('cancelBtn').addEventListener('click', () => { resetForm(); $('month').value = currentMonth(); render(); });
@@ -661,7 +774,11 @@
       if (!valid(data.crypto) || !valid(data.bourse)) throw new Error('format');
       if (!confirm('Remplacer les données actuelles par celles du fichier ?')) return;
       ['crypto', 'bourse'].forEach((k) => data[k].forEach((e) => { e.id ||= uid(); }));
-      state = { crypto: data.crypto, bourse: data.bourse, prices: { crypto: {}, bourse: {}, ...(data.prices || {}) } };
+      state = {
+        crypto: data.crypto, bourse: data.bourse,
+        prices: { crypto: {}, bourse: {}, ...(data.prices || {}) },
+        tickers: { bourse: {}, ...(data.tickers || {}) },
+      };
       resetForm();
       save();
       render();
@@ -672,6 +789,7 @@
 
   render();
   refreshLivePrices();
+  refreshBoursePrices();
 
   if ('serviceWorker' in navigator) {
     window.addEventListener('load', () => navigator.serviceWorker.register('sw.js'));

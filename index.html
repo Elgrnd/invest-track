@@ -69,6 +69,23 @@
       <p class="hint" id="noQtyInfo" hidden></p>
     </section>
 
+    <section class="card" id="eodCard" hidden>
+      <h2>Cours de bourse automatiques</h2>
+      <p class="hint">
+        Les cours de clôture des ETF sont récupérés via <a href="https://eodhd.com/register" target="_blank" rel="noopener">EODHD</a>
+        (compte gratuit : 20 appels par jour, soit 1 appel par ETF toutes les 6 h au plus).
+        La clé reste sur cet appareil et n'est pas incluse dans les exports.
+      </p>
+      <p class="eod-state"><span id="eodState"></span>
+        <button type="button" class="small" id="eodEdit">Modifier</button>
+        <button type="button" class="small" id="eodRemove">Supprimer</button>
+      </p>
+      <form id="eodForm" class="eod-form" autocomplete="off">
+        <input type="password" id="eodInput" placeholder="Votre clé API EODHD" autocapitalize="off" spellcheck="false">
+        <button type="submit" class="primary">Enregistrer</button>
+      </form>
+    </section>
+
     <section class="card" id="splitCard">
       <h2 id="splitTitle">Répartition</h2>
       <div class="donut-wrap">

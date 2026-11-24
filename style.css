@@ -196,3 +196,11 @@ button.small { padding: 6px 10px; font-size: .8rem; }
 .price-btn { padding: 0 4px; border: 0; color: var(--muted); font-size: .8rem; text-decoration: underline dotted; }
 .price-btn.missing { color: var(--accent); }
 .entry .qty { color: var(--muted); font-size: .8rem; margin-right: 6px; font-variant-numeric: tabular-nums; }
+
+/* ---- Réglages EODHD ---- */
+.hint a { color: var(--accent); }
+.eod-state { display: flex; align-items: center; gap: 8px; margin: 0 0 4px; font-size: .9rem; }
+.eod-state span { flex: 1; }
+.eod-form { display: flex; gap: 8px; margin-top: 8px; }
+.eod-form input { flex: 1; min-width: 0; }
+.eod-form .primary { padding: 12px 14px; }
